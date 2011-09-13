@@ -192,7 +192,9 @@ html2canvas.Generate.Gradient = function(src, bounds) {
             }
         }
     }
+    
     if ( tmp = src.match(/-webkit-linear-gradient\((.*)\)/) ) {
+        
         position = tmp[1].split( ",", 1 )[0];
         getColors( tmp[1].substr( position.length + 2 ) );
         position = position.split(' ');
@@ -219,7 +221,8 @@ html2canvas.Generate.Gradient = function(src, bounds) {
             
         }
 
-    } else if (tmp = src.match(/-webkit-gradient\(linear, (\d+)[%]{0,1} (\d+)[%]{0,1}, (\d+)[%]{0,1} (\d+)[%]{0,1}, from\((.*)\), to\((.*)\)\)/)) {
+    } else if (tmp = src.match(/-webkit-gradient\(linear, (\d+)% (\d+)\%, (\d+)% (\d+)%, from\((.*)\), to\((.*)\)\)/)) {
+        
         p0 = (tmp[1] * bounds.width) / 100;
         p1 = (tmp[2] * bounds.height) / 100;
         p2 = (tmp[3] * bounds.width) / 100;
@@ -229,6 +232,7 @@ html2canvas.Generate.Gradient = function(src, bounds) {
         steps.push(tmp[6]);
         
     } else if (tmp = src.match(/-moz-linear-gradient\((\d+)% (\d+)%, (.*)\)/)) {
+        
         p0 = (tmp[1] * bounds.width) / 100;
         p1 = (tmp[2] * bounds.width) / 100;
         p2 = bounds.width - p0;
