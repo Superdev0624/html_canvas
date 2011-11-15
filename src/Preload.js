@@ -1,3 +1,11 @@
+/*
+  html2canvas @VERSION@ <http://html2canvas.hertzen.com>
+  Copyright (c) 2011 Niklas von Hertzen. All rights reserved.
+  http://www.twitter.com/niklasvh
+
+  Released under MIT License
+*/
+
 html2canvas.Preload = function(element, opts){
     
     var options = {
@@ -250,10 +258,7 @@ html2canvas.Preload = function(element, opts){
     
     // load <img> images
     for (i = 0; i < imgLen; i+=1){
-        var imgSrc = domImages[i].getAttribute( "src" );
-        if ( imgSrc ) {
-            methods.loadImage( imgSrc );   
-        }        
+        methods.loadImage( domImages[i].getAttribute( "src" ) );
     }
     
     // remove 'start'
