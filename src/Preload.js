@@ -12,7 +12,7 @@ html2canvas.Preload = function(element, opts){
         "proxy": "http://html2canvas.appspot.com/"
     },
     images = [],
-    pageOrigin,
+    pageOrigin = window.location.protocol + window.location.host,
     imagesLoaded = 0,
     methods,
     i,
@@ -22,8 +22,6 @@ html2canvas.Preload = function(element, opts){
     imgLen = domImages.length,
     link = doc.createElement("a");
     
-    link.href = window.location.href;
-    pageOrigin  = link.protocol + link.host;
     opts = opts || {};
     
     options = html2canvas.Util.Extend(opts, options);
@@ -34,8 +32,8 @@ html2canvas.Preload = function(element, opts){
     
     function isSameOrigin(url){
         link.href = url;
-        var origin = link.protocol + link.host;
-        return ":" === origin || (origin === pageOrigin);
+        return ((link.protocol + link.host) === pageOrigin);
+        
     }
     
     function getIndex(array,src){
