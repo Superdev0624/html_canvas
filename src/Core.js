@@ -36,6 +36,8 @@ html2canvas.Util.backgroundImage = function (src) {
 };
 
 html2canvas.Util.Bounds = function getBounds (el) {
+        
+    window.scroll(0,0);
     var clientRect,
     bounds = {};
         
@@ -107,9 +109,9 @@ html2canvas.Util.getCSS = function (el, attribute) {
         if ( rsLeft ) {
             el.runtimeStyle.left = rsLeft;
         }*/
-    // val = $(el).css(attribute);
+    val = $(el).css(attribute);
     // }
-    return $(el).css(attribute);
+    return val;
     
   
 };
@@ -126,12 +128,5 @@ html2canvas.Util.Extend = function (options, defaults) {
 
 html2canvas.Util.Children = function(el) {
     // $(el).contents() !== el.childNodes, Opera / IE have issues with that
-    var children;
-    try {
-      children = $(el).contents();
-    } catch (ex) {
-      html2canvas.log("html2canvas.Util.Children failed with exception: " + ex.message);
-      children = [];
-    }
-    return children;
+    return $(el).contents();
 }

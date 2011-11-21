@@ -11,7 +11,7 @@
  */
 
 html2canvas.Parse = function (element, images, opts) {
-    window.scroll(0,0);
+ 
     opts = opts || {};
   
     // select body by default
@@ -48,7 +48,7 @@ html2canvas.Parse = function (element, images, opts) {
     childrenLen;
     
 
-    images = images || [];
+    images = images || {};
     
     // Test whether we can use ranges to measure bounding boxes
     // Opera doesn't provide valid bounds.height/bottom even though it supports the method.
@@ -175,14 +175,14 @@ html2canvas.Parse = function (element, images, opts) {
         
 
 
-        // http://probablyprogramming.com/2009/03/15/the-tiniest-gif-ever (handtinywhite.gif)
-        img.src = "data:image/gif;base64,R0lGODlhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
+    
+        // TODO add another image
+        img.src = "http://html2canvas.hertzen.com/images/8.jpg";
         img.width = 1;
         img.height = 1;
     
         img.style.margin = 0;
         img.style.padding = 0;
-        img.style.verticalAlign = "baseline";
 
         span.style.fontFamily = font;
         span.style.fontSize = fontSize;
@@ -514,28 +514,13 @@ html2canvas.Parse = function (element, images, opts) {
     
     }
     
-    function loadImage (src){	     
-        
-        var imgIndex = -1, 
-        i,
-        imgLen;
-        if (images.indexOf){
-            imgIndex = images.indexOf(src);
-        }else{
-            for(i = 0, imgLen = images.length; i < imgLen.length; i+=1){
-                if(images[i] === src) {
-                    imgIndex = i;
-                    break;
-                } 
-            }
-        }
-
-        if (imgIndex > -1){
-            return images[imgIndex+1];
-        }else{
-            return false;
-        }
-				
+    function loadImage (src){
+      var img = images[src];
+      if (img && img.succeeded === true) {
+        return img.img;
+      } else {
+        return false;
+      }
     }
     
     
@@ -1004,8 +989,7 @@ html2canvas.Parse = function (element, images, opts) {
 					
                 }	
             }else{
-                    
-                html2canvas.log("Error loading background:" + background_image);
+                html2canvas.log("html2canvas: Error loading background:" + background_image);
             //console.log(images);
             }
 					
@@ -1164,8 +1148,8 @@ html2canvas.Parse = function (element, images, opts) {
                         bounds.height - (borders[0].width + borders[2].width + paddingTop + paddingBottom) //dh       
                         );
            
-                }else {
-                    html2canvas.log("Error loading <img>:" + imgSrc);
+                }else{
+                    html2canvas.log("html2canvas: Error loading <img>:" + imgSrc);
                 }
                 break;
             case "INPUT":
