@@ -11,7 +11,7 @@
  */
 
 html2canvas.Parse = function (element, images, opts) {
- 
+    window.scroll(0,0);
     opts = opts || {};
   
     // select body by default
@@ -47,6 +47,7 @@ html2canvas.Parse = function (element, images, opts) {
     children,
     childrenLen;
     
+    options = html2canvas.Util.Extend(opts, options);
 
     images = images || {};
     
@@ -175,14 +176,14 @@ html2canvas.Parse = function (element, images, opts) {
         
 
 
-    
-        // TODO add another image
-        img.src = "http://html2canvas.hertzen.com/images/8.jpg";
+        // http://probablyprogramming.com/2009/03/15/the-tiniest-gif-ever (handtinywhite.gif)
+        img.src = "data:image/gif;base64,R0lGODlhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
         img.width = 1;
         img.height = 1;
     
         img.style.margin = 0;
         img.style.padding = 0;
+        img.style.verticalAlign = "baseline";
 
         span.style.fontFamily = font;
         span.style.fontSize = fontSize;
@@ -1185,6 +1186,24 @@ html2canvas.Parse = function (element, images, opts) {
                 break;
             case "LI":
                 renderListItem(el, stack, bgbounds);
+                break;
+            case "CANVAS":
+                paddingLeft = getCSS(el, 'paddingLeft', true);
+                paddingTop = getCSS(el, 'paddingTop', true);
+                paddingRight = getCSS(el, 'paddingRight', true);
+                paddingBottom = getCSS(el, 'paddingBottom', true);
+                renderImage(
+                    ctx,
+                    el,
+                    0, //sx
+                    0, //sy
+                    el.width, //sw
+                    el.height, //sh
+                    x + paddingLeft + borders[3].width, //dx
+                    y + paddingTop + borders[0].width, // dy
+                    bounds.width - (borders[1].width + borders[3].width + paddingLeft + paddingRight), //dw
+                    bounds.height - (borders[0].width + borders[2].width + paddingTop + paddingBottom) //dh
+                );
                 break;
         }
 
