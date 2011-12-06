@@ -31,7 +31,7 @@ html2canvas.Generate.Gradient = function(src, bounds) {
     canvas.height = bounds.height;
     
 
-    function getColors(input) {      
+    function getColors(input) {
         var j = -1, 
         color = '', 
         chr;
@@ -39,18 +39,14 @@ html2canvas.Generate.Gradient = function(src, bounds) {
         while( j++ < input.length ) {
             chr = input.charAt( j );
             if (chr === ')') {
-                color += chr;                
+                color += chr;
                 steps.push( color );
                 color = '';
                 j+=2;
-            } else if (color || isValidColorStartChar(chr)) {                
+            } else {
                 color += chr;
             }
         }
-    }
-    
-    function isValidColorStartChar(c) {     
-    	return c && /[^0-9%,]/.test(c);
     }
     
     if ( tmp = src.match(/-webkit-linear-gradient\((.*)\)/) ) {
