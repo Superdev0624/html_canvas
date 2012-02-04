@@ -18,8 +18,7 @@
     }
     setTimeout(function() {
       $(document.body).html2canvas({
-        logging: true,
-        profile: true
+        logging: true
       });
     }, 100);
   };
