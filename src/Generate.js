@@ -27,7 +27,6 @@ var reGradients = [
 /*
  * TODO: Add IE10 vendor prefix (-ms) support
  * TODO: Add W3C gradient (linear-gradient) support
- * TODO: Add radial gradient parsing
  * TODO: Maybe some RegExp optimizations are possible ;o)
  */
 _html2canvas.Generate.parseGradient = function(css, bounds) {  
@@ -247,7 +246,7 @@ _html2canvas.Generate.parseGradient = function(css, bounds) {
                             gradient.rx = gradient.ry = Math.min(tl, tr, br, bl);
                             break;
                         case 'farthest-side':
-                            if(m2[0] == 'circle'){
+                            if(m2[0] === 'circle'){
                                 gradient.rx = gradient.ry = Math.max(
                                     gradient.cx,
                                     gradient.cy,
@@ -270,7 +269,7 @@ _html2canvas.Generate.parseGradient = function(css, bounds) {
                             break;
                         case 'closest-side':
                         case 'contain': // is equivalent to closest-side
-                            if(m2[0] == 'circle'){
+                            if(m2[0] === 'circle'){
                                 gradient.rx = gradient.ry = Math.min(
                                     gradient.cx,
                                     gradient.cy,
@@ -356,6 +355,8 @@ _html2canvas.Generate.Gradient = function(src, bounds) {
     
         img.src = canvas.toDataURL();
     } else if(gradient && gradient.type === 'radial'){
+        
+        // TODO: Add support for "ellipsis" drawing
         grad = ctx.createRadialGradient(gradient.cx, gradient.cy, 0, gradient.cx, gradient.cy, gradient.rx);
         
         for (i = 0, len = gradient.colorStops.length; i < len; i+=1) {
