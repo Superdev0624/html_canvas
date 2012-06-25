@@ -8,6 +8,8 @@
 "use strict";
 
 var _html2canvas = {},
+previousElement,
+computedCSS,
 html2canvas;
 
 
@@ -106,7 +108,10 @@ _html2canvas.Util.getCSS = function (el, attribute) {
 
 
     if ( window.getComputedStyle ) {
-        val = document.defaultView.getComputedStyle(el, null)[ attribute ];
+        if ( previousElement !== el ) {
+            computedCSS = document.defaultView.getComputedStyle(el, null);
+        }
+        val = computedCSS[ attribute ];
 
         if ( attribute === "backgroundPosition" ) {
 
@@ -213,12 +218,49 @@ _html2canvas.Util.Extend = function (options, defaults) {
     return defaults;
 };
 
-_html2canvas.Util.Children = function(el) {
-    // $(el).contents() !== el.childNodes, Opera / IE have issues with that
+
+/*
+ * Derived from jQuery.contents()
+ * Copyright 2010, John Resig
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * http://jquery.org/license
+ */
+_html2canvas.Util.Children = function( elem ) {
+
+
     var children;
     try {
-        children = $(el).contents();
-    //children = (el.nodeName && el.nodeName.toUpperCase() === "IFRAME") ? el.contentDocument || el.contentWindow.document :  el.childNodes ;
+
+        children = (elem.nodeName && elem.nodeName.toUpperCase() === "IFRAME") ?
+        elem.contentDocument || elem.contentWindow.document : (function( array ){
+            var ret = [];
+
+            if ( array !== null ) {
+
+                (function( first, second ) {
+                    var i = first.length,
+                    j = 0;
+
+                    if ( typeof second.length === "number" ) {
+                        for ( var l = second.length; j < l; j++ ) {
+                            first[ i++ ] = second[ j ];
+                        }
+
+                    } else {
+                        while ( second[j] !== undefined ) {
+                            first[ i++ ] = second[ j++ ];
+                        }
+                    }
+
+                    first.length = i;
+
+                    return first;
+                })( ret, array );
+
+            }
+
+            return ret;
+        })( elem.childNodes );
 
     } catch (ex) {
         h2clog("html2canvas.Util.Children failed with exception: " + ex.message);
