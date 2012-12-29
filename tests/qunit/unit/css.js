@@ -145,67 +145,6 @@ $(function() {
         });
     }); 
     
-    test('background-image', function () {
-        test_parse_background_image(
-            'url(test)', 
-            { prefix: '', method: 'url', definition: 'test', value: 'url(test)' }, 
-            'basic url'
-        );
-
-        test_parse_background_image(
-            'url("test")', 
-            { prefix: '', method: 'url', definition: 'test', value: 'url("test")' }, 
-            'quoted url'
-        );
-
-        test_parse_background_image(
-            'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)', 
-            { 
-                prefix: '', method: 'url', 
-                definition: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 
-                value: 'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)' 
-            }, 
-            'data url'
-        );
-
-        test_parse_background_image(
-            'linear-gradient(red,black)', 
-            { prefix: '', method: 'linear-gradient', definition: 'red,black', value: 'linear-gradient(red,black)' }, 
-            'linear-gradient'
-        );
-
-        test_parse_background_image(
-            'linear-gradient(top,rgb(255,0,0),rgb(0,0,0))', 
-            { prefix: '', method: 'linear-gradient', definition: 'top,rgb(255,0,0),rgb(0,0,0)', value: 'linear-gradient(top,rgb(255,0,0),rgb(0,0,0))' }, 
-            'linear-gradient'
-        );
-
-        test_parse_background_image(
-            '-webkit-linear-gradient(red,black)', 
-            { prefix: '-webkit-', method: 'linear-gradient', definition: 'red,black', value: '-webkit-linear-gradient(red,black)' }, 
-            'linear-gradient'
-        );
-
-        test_parse_background_image(
-            'linear-gradient(red,black), url(test), url("test"),\n none, ', [
-            { prefix: '', method: 'linear-gradient', definition: 'red,black', value: 'linear-gradient(red,black)' },
-            { prefix: '', method: 'url', definition: 'test', value: 'url(test)' },
-            { prefix: '', method: 'url', definition: 'test', value: 'url("test")' },
-            { prefix: '', method: 'none', definition: '', value: 'none' }
-            ],
-            'multiple backgrounds'
-        );
-
-    });
-
-    function test_parse_background_image(value, expected, name) {
-        deepEqual(
-            _html2canvas.Util.parseBackgroundImage(value), 
-            Array.isArray(expected) ? expected : [expected], 
-            name
-        );
-    }
-
     // TODO add backgroundPosition % tests
     
 });
