@@ -1,4 +1,5 @@
-window.html2canvas = function(elements, opts) {
+html2canvas = window.html2canvas = function( elements, opts ) {
+
   var queue,
   canvas,
   options = {
@@ -7,13 +8,14 @@ window.html2canvas = function(elements, opts) {
     elements: elements,
 
     // preload options
-    proxy: "",
+    proxy: "http://html2canvas.appspot.com/",
     timeout: 0,    // no timeout
     useCORS: false, // try to load images as CORS (where available), before falling back to proxy
     allowTaint: false, // whether to allow images to taint the canvas, won't need proxy if set to true
 
     // parse options
     svgRendering: false, // use svg powered rendering where available (FF11+)
+    iframeDefault: "default",
     ignoreElements: "IFRAME|OBJECT|PARAM",
     useOverflow: true,
     letterRendering: false,
@@ -25,9 +27,17 @@ window.html2canvas = function(elements, opts) {
     height: null,
     taintTest: true, // do a taint test with all images before applying to canvas
     renderer: "Canvas"
-  };
+  }, renderer;
 
   options = _html2canvas.Util.Extend(opts, options);
+
+  if (typeof options.renderer === "string" && _html2canvas.Renderer[options.renderer] !== undefined) {
+    options._renderer = _html2canvas.Renderer[options.renderer]( options );
+  } else if (typeof options.renderer === "function") {
+    options._renderer = options.renderer( options );
+  } else {
+    throw("Unknown renderer");
+  }
 
   _html2canvas.logging = options.logging;
   options.complete = function( images ) {
@@ -73,7 +83,7 @@ window.html2canvas = function(elements, opts) {
   };
 };
 
-window.html2canvas.log = h2clog; // for renderers
-window.html2canvas.Renderer = {
+html2canvas.log = h2clog; // for renderers
+html2canvas.Renderer = {
   Canvas: undefined // We are assuming this will be used
 };

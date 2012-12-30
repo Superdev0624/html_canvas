@@ -13,7 +13,7 @@ module.exports = function(grunt) {
       post: '})(window,document);'
     },
     lint: {
-      files: ['build/<%= pkg.name %>.js']
+      files: ['grunt.js', 'build/<%= pkg.name %>.js']
     },
     qunit: {
       files: ['tests/qunit/index.html']
@@ -55,19 +55,7 @@ module.exports = function(grunt) {
     uglify: {}
   });
 
-  var selenium = require("./tests/selenium.js");
-  grunt.registerTask('webdriver', 'Browser render tests', function(arg1) {
-
-    var done = this.async();
-
-    if (arguments.length === 0) {
-      selenium.tests();
-    } else {
-      selenium[arg1].apply(null, arguments);
-    }
-  });
-
   // Default task.
-  grunt.registerTask('default', 'concat lint qunit webdriver min');
+  grunt.registerTask('default', 'concat lint qunit min');
 
 };

@@ -94,6 +94,7 @@ _html2canvas.Preload = function( options ) {
     var contents = _html2canvas.Util.Children(el),
     i,
     background_image,
+    background_images,
     src,
     img,
     elNodeType = false;
@@ -122,30 +123,32 @@ _html2canvas.Preload = function( options ) {
       }catch(e) {
         h2clog("html2canvas: failed to get background-image - Exception: " + e.message);
       }
-      if ( background_image && background_image !== "1" && background_image !== "none" ) {
 
-        // TODO add multi image background support
+      background_images = _html2canvas.Util.parseBackgroundImage(background_image);
+      while(!!(background_image = background_images.shift())) {
 
-        if (/^(-webkit|-o|-moz|-ms|linear)-/.test( background_image )) {
+        if ( background_image.value && background_image.value !== "1" && background_image.value !== "none" ) {
+          if (/^(-webkit|-o|-moz|-ms|linear)-/.test( background_image.method )) {
 
-          img = _html2canvas.Generate.Gradient( background_image, _html2canvas.Util.Bounds( el ) );
+            img = _html2canvas.Generate.Gradient( background_image.value, _html2canvas.Util.Bounds( el ) );
 
-          if ( img !== undefined ){
-            images[background_image] = {
-              img: img,
-              succeeded: true
-            };
-            images.numTotal++;
-            images.numLoaded++;
-            start();
+            if ( img !== undefined ){
+              images[background_image.value] = {
+                img: img,
+                succeeded: true
+              };
+              images.numTotal++;
+              images.numLoaded++;
+              start();
 
+            }
+
+          } else {
+            src = _html2canvas.Util.backgroundImage(background_image.value);
+            methods.loadImage(src);
           }
 
-        } else {
-          src = _html2canvas.Util.backgroundImage(background_image.match(/data:image\/.*;base64,/i) ? background_image : background_image.split(",")[0]);
-          methods.loadImage(src);
         }
-
       }
     }
   }
