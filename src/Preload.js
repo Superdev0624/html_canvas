@@ -94,6 +94,7 @@ _html2canvas.Preload = function( options ) {
     var contents = _html2canvas.Util.Children(el),
     i,
     background_image,
+    background_images,
     src,
     img,
     elNodeType = false;
@@ -122,16 +123,25 @@ _html2canvas.Preload = function( options ) {
       }catch(e) {
         h2clog("html2canvas: failed to get background-image - Exception: " + e.message);
       }
-      if ( background_image && background_image !== "1" && background_image !== "none" ) {
 
-        // TODO add multi image background support
+      background_images = _html2canvas.Util.parseBackgroundImage(background_image);
+      while(!!(background_image = background_images.shift())) {
+        if(!background_image || 
+            !background_image.method || 
+            !background_image.args || 
+            background_image.args.length === 0 ) {
+          continue;
+        }
 
-        if (/^(-webkit|-o|-moz|-ms|linear)-/.test( background_image )) {
+        if (background_image.method === 'url') {
+          src = background_image.args[0];
+          methods.loadImage(src);
 
-          img = _html2canvas.Generate.Gradient( background_image, _html2canvas.Util.Bounds( el ) );
+        } else if( background_image.method.match( /\-gradient$/ ) ) {
+          img = _html2canvas.Generate.Gradient( background_image.value, _html2canvas.Util.Bounds( el ) );
 
           if ( img !== undefined ){
-            images[background_image] = {
+            images[background_image.value] = {
               img: img,
               succeeded: true
             };
@@ -140,12 +150,7 @@ _html2canvas.Preload = function( options ) {
             start();
 
           }
-
-        } else {
-          src = _html2canvas.Util.backgroundImage(background_image.match(/data:image\/.*;base64,/i) ? background_image : background_image.split(",")[0]);
-          methods.loadImage(src);
         }
-
       }
     }
   }
