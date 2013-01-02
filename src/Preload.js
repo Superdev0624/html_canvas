@@ -94,6 +94,7 @@ _html2canvas.Preload = function( options ) {
     var contents = _html2canvas.Util.Children(el),
     i,
     background_image,
+    background_images,
     src,
     img,
     elNodeType = false;
@@ -122,16 +123,25 @@ _html2canvas.Preload = function( options ) {
       }catch(e) {
         h2clog("html2canvas: failed to get background-image - Exception: " + e.message);
       }
-      if ( background_image && background_image !== "1" && background_image !== "none" ) {
 
-        // TODO add multi image background support
+      background_images = _html2canvas.Util.parseBackgroundImage(background_image);
+      while(!!(background_image = background_images.shift())) {
+        if(!background_image || 
+            !background_image.method || 
+            !background_image.args || 
+            background_image.args.length === 0 ) {
+          continue;
+        }
 
-        if (/^(-webkit|-o|-moz|-ms|linear)-/.test( background_image )) {
+        if (background_image.method === 'url') {
+          src = background_image.args[0];
+          methods.loadImage(src);
 
-          img = _html2canvas.Generate.Gradient( background_image, _html2canvas.Util.Bounds( el ) );
+        } else if( background_image.method.match( /\-gradient$/ ) ) {
+          img = _html2canvas.Generate.Gradient( background_image.value, _html2canvas.Util.Bounds( el ) );
 
           if ( img !== undefined ){
-            images[background_image] = {
+            images[background_image.value] = {
               img: img,
               succeeded: true
             };
@@ -140,12 +150,7 @@ _html2canvas.Preload = function( options ) {
             start();
 
           }
-
-        } else {
-          src = _html2canvas.Util.backgroundImage(background_image.match(/data:image\/.*;base64,/i) ? background_image : background_image.split(",")[0]);
-          methods.loadImage(src);
         }
-
       }
     }
   }
@@ -201,6 +206,79 @@ _html2canvas.Preload = function( options ) {
          */
   }
 
+
+
+  var uid = 0, injectStyle;
+  function injectPseudoElements(el) {
+    var before = getPseudoElement(el, ':before'),
+    after = getPseudoElement(el, ':after');
+    if(!before && !after) {
+      return;
+    }
+    if(!el.id) { 
+      el.id = '__html2cavas__' + (uid++);
+    }
+    if(!injectStyle) {
+      injectStyle = document.createElement('style');
+    }
+
+    if(before) {
+      el.__html2canvas_before = before;
+      injectStyle.innerHTML += '#' + el.id + ':before { content: "" !important; display: none !important; }\n';
+      if(el.childNodes.length > 0) {
+        el.insertBefore(before, el.childNodes[0]);
+      } else {
+        el.appendChild(before);
+      }
+    }
+
+    if (after) {
+      el.__html2canvas_after = after;
+      injectStyle.innerHTML += '#' + el.id + ':after { content: "" !important; display: none !important; }\n';
+      el.appendChild(after);
+    }
+  }
+
+  function removePseudoElements(el) {
+    var before = el.__html2canvas_before,
+    after = el.__html2canvas_after;
+    if(before) {
+      el.__html2canvas_before = undefined;
+      el.removeChild(before);
+    }
+    if(after) {
+      el.__html2canvas_after = undefined;
+      el.removeChild(after);
+    }
+  }
+
+  function getPseudoElement(el, which) {
+    var elStyle = window.getComputedStyle(el, which);
+    if(!elStyle || !elStyle.content) { return; }
+
+    var content = elStyle.content + '', 
+    first = content.substr( 0, 1 );
+    //strips quotes
+    if(first === content.substr( content.length - 1 ) && first.match(/'|"/)) {
+      content = content.substr( 1, content.length - 2 );
+    }
+
+    var isImage = content.substr( 0, 3 ) === 'url',
+    elps = document.createElement( isImage ? 'img' : 'span' );
+
+    elps.className = '__html2canvas__' + which.substr(1);
+    Object.keys(elStyle).forEach(function(prop) {
+      //skip indexed properties
+      if(!isNaN(parseInt(prop, 10))) { return; }
+      elps.style[prop] = elStyle[prop];
+    });
+    if(isImage) {
+      elps.src = _html2canvas.Util.parseBackgroundImage(content)[0].args[0];
+    } else {
+      elps.innerHTML = content;
+    }
+    return elps;
+  }
 
   methods = {
     loadImage: function( src ) {
@@ -295,18 +373,34 @@ _html2canvas.Preload = function( options ) {
           start();
         }
       }
+
+      if(injectStyle) {
+        injectStyle.parentNode.removeChild(injectStyle);
+        injectStyle = undefined;
+
+        [].slice.apply(element.all || element.getElementsByTagName('*'))
+          .forEach(removePseudoElements);
+      }
     },
+    
     renderingDone: function() {
       if (timeoutTimer) {
         window.clearTimeout(timeoutTimer);
       }
     }
-
   };
 
   if (options.timeout > 0) {
     timeoutTimer = window.setTimeout(methods.cleanupDOM, options.timeout);
   }
+
+  [].slice.apply(element.all || element.getElementsByTagName('*'))
+      .forEach(injectPseudoElements);
+  if(injectStyle) {
+    element.appendChild(injectStyle);
+  }
+
+
   h2clog('html2canvas: Preload starts: finding background-images');
   images.firstRun = true;
 
