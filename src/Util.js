@@ -5,7 +5,6 @@ window.html2canvas = function(elements, opts) {
     // general
     logging: false,
     elements: elements,
-    background: "#fff",
 
     // preload options
     proxy: "",
