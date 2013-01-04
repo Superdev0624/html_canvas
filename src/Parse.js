@@ -61,8 +61,12 @@ _html2canvas.Parse = function (images, options) {
     return (/^(normal|none|0px)$/.test(letter_spacing));
   }
 
+  function trimText (text) {
+    return text.replace(/^\s*/g, "").replace(/\s*$/g, "");
+  }
+
   function drawText(currentText, x, y, ctx){
-    if (currentText !== null && _html2canvas.Util.trimText(currentText).length > 0) {
+    if (currentText !== null && trimText(currentText).length > 0) {
       ctx.fillText(currentText, x, y);
       numDraws+=1;
     }
@@ -112,7 +116,7 @@ _html2canvas.Parse = function (images, options) {
   function getTextBounds(state, text, textDecoration, isLast) {
     var bounds;
     if (support.rangeBounds) {
-      if (textDecoration !== "none" || _html2canvas.Util.trimText(text).length !== 0) {
+      if (textDecoration !== "none" || trimText(text).length !== 0) {
         bounds = textRangeBounds(text, state.node, state.textOffset);
       }
       state.textOffset += text.length;
@@ -156,7 +160,7 @@ _html2canvas.Parse = function (images, options) {
       textOffset: 0
     };
 
-    if (_html2canvas.Util.trimText(textNode.nodeValue).length > 0) {
+    if (trimText(textNode.nodeValue).length > 0) {
       textNode.nodeValue = textTransform(textNode.nodeValue, getCSS(el, "textTransform"));
       textAlign = textAlign.replace(["-webkit-auto"],["auto"]);
 
@@ -165,6 +169,16 @@ _html2canvas.Parse = function (images, options) {
       : textNode.nodeValue.split("");
 
       metrics = setTextVariables(ctx, el, textDecoration, color);
+
+      if (options.chinese) {
+        textList.forEach(function(word, index) {
+          if (/.*[\u4E00-\u9FA5].*$/.test(word)) {
+            word = word.split("");
+            word.unshift(index, 1)
+            textList.splice.apply(textList, word);
+          }
+        });
+      }
 
       textList.forEach(function(text, index) {
         var bounds = getTextBounds(state, text, textDecoration, (index < textList.length - 1));
@@ -721,11 +735,7 @@ _html2canvas.Parse = function (images, options) {
     valueWrap.style.top = bounds.top + "px";
     valueWrap.style.left = bounds.left + "px";
 
-    textValue = (el.nodeName === "SELECT") ? (el.options[el.selectedIndex] || 0).text : el.value;
-    if(!textValue) {
-      textValue = el.placeholder;
-    }
-
+    textValue = (el.nodeName === "SELECT") ? el.options[el.selectedIndex].text : el.value;
     textNode = doc.createTextNode(textValue);
 
     valueWrap.appendChild(textNode);
@@ -774,15 +784,9 @@ _html2canvas.Parse = function (images, options) {
       );
   }
 
-  function renderBackgroundRepeating(el, bounds, ctx, image, imageIndex) {
-    var backgroundSize = _html2canvas.Util.BackgroundSize(el, bounds, image, imageIndex),
-    backgroundPosition = _html2canvas.Util.BackgroundPosition(el, bounds, image, imageIndex, backgroundSize),
-    backgroundRepeat = getCSS(el, "backgroundRepeat").split(",");
-
-    image = resizeImage(image, backgroundSize);
-
-    backgroundRepeat = backgroundRepeat[imageIndex] || backgroundRepeat[0];
-
+  function renderBackgroundRepeating(el, bounds, ctx, image) {
+    var backgroundPosition = _html2canvas.Util.BackgroundPosition(el, bounds, image),
+    backgroundRepeat = getCSS(el, "backgroundRepeat").split(",")[0];
     switch (backgroundRepeat) {
       case "repeat-x":
         backgroundRepeatShape(ctx, image, backgroundPosition, bounds,
@@ -800,49 +804,31 @@ _html2canvas.Parse = function (images, options) {
         break;
 
       default:
-        renderBackgroundRepeat(ctx, image, backgroundPosition, { top: bounds.top, left: bounds.left, width: image.width, height: image.height });
+        renderBackgroundRepeat(ctx, image, backgroundPosition, bounds);
         break;
     }
   }
 
   function renderBackgroundImage(element, bounds, ctx) {
+    // TODO add support for multi background-images
     var backgroundImage = getCSS(element, "backgroundImage"),
-    backgroundImages = _html2canvas.Util.parseBackgroundImage(backgroundImage),
     image;
 
-    for(var imageIndex = backgroundImages.length; imageIndex-- > 0;) {
-      backgroundImage = backgroundImages[imageIndex];
-     
-      if (!backgroundImage.args || backgroundImage.args.length === 0) {
-        continue;
-      }
+    if (!/data:image\/.*;base64,/i.test(backgroundImage) && !/^(-webkit|-moz|linear-gradient|-o-)/.test(backgroundImage)) {
+      backgroundImage = backgroundImage.split(",")[0];
+    }
 
-      var key = backgroundImage.method === 'url' ?
-        backgroundImage.args[0] :
-        backgroundImage.value + '/' + element.__html2canvas__id + '/' + imageIndex;
-
-      image = loadImage(key);
+    if (typeof backgroundImage !== "undefined" && /^(1|none)$/.test(backgroundImage) === false) {
+      image = loadImage(_html2canvas.Util.backgroundImage(backgroundImage));
 
       // TODO add support for background-origin
       if (image) {
-        renderBackgroundRepeating(element, bounds, ctx, image, imageIndex);
+        renderBackgroundRepeating(element, bounds, ctx, image);
       } else {
         h2clog("html2canvas: Error loading background:" + backgroundImage);
       }
-    }
-  }
 
-  function resizeImage(image, bounds) {
-    if(image.width === bounds.width && image.height === bounds.height) {
-      return image;
     }
-
-    var ctx, canvas = doc.createElement('canvas');
-    canvas.width = bounds.width;
-    canvas.height = bounds.height;
-    ctx = canvas.getContext("2d");
-    drawImage(ctx, image, 0, 0, image.width, image.height, 0, 0, bounds.width, bounds.height );
-    return canvas;
   }
 
   function setOpacity(ctx, element, parentStack) {
@@ -925,17 +911,17 @@ _html2canvas.Parse = function (images, options) {
       case "INPUT":
         // TODO add all relevant type's, i.e. HTML5 new stuff
         // todo add support for placeholder attribute for browsers which support it
-        if (/^(text|url|email|submit|button|reset)$/.test(element.type) && (element.value || element.placeholder).length > 0){
+        if (/^(text|url|email|submit|button|reset)$/.test(element.type) && element.value.length > 0){
           renderFormValue(element, bounds, stack);
         }
         break;
       case "TEXTAREA":
-        if ((element.value || element.placeholder).length > 0){
+        if (element.value.length > 0){
           renderFormValue(element, bounds, stack);
         }
         break;
       case "SELECT":
-        if ((element.options||element.placeholder).length > 0){
+        if (element.options.length > 0){
           renderFormValue(element, bounds, stack);
         }
         break;
