@@ -99,7 +99,7 @@
               }
               done(100 - (Math.round((diff/h2cPixels.length) * 10000) / 100));
             });
-          });
+          })
         });
       });
     });
@@ -247,57 +247,26 @@
   };
 
   exports.markdown = function() {
-    var data = {},
-        html = "<table><thead><tr><td></td>",
-        md = " | ",
-        browsers = ["chrome", "firefox", "iexplorer", "safari"],
-        activeBrowsers = [];
+    var data = {}, html = "<table><thead><tr><td></td>",
+    browsers = ["chrome", "firefox", "iexplorer"];
 
-    // Create row for browsers
     browsers.forEach(function(browser) {
-
-       if (fs.existsSync("tests/results/" + browser + ".json")) {
-
-        var fileContents = fs.readFileSync("tests/results/" + browser + ".json");
-        data[browser] = JSON.parse(fileContents);
-
-        activeBrowsers.push(browser);
-            
-        html += "<th>" + browser + "<br />" + data[browser].version + "</th>";
-        md += browser + data[browser].version + " | ";
-      } else {
-        console.log("Browser report not found. ", browser + ".json");
-      }
-
+      data[browser] = JSON.parse(fs.readFileSync("tests/results/" + browser + ".json"));
+      html += "<th>" + browser + "<br />" + data[browser].version + "</th>";
     });
-
     html += "</tr></thead><tbody>\n";
-    md += "\n ----";
-    for (var i = activeBrowsers.length - 1; i >= 0; i--) {
-      md += "|---- ";
-    }
-    md += "\n";
 
-    Object.keys(data[activeBrowsers[0]].tests).forEach(function(testFile) {
-
+    Object.keys(data[browsers[0]].tests).forEach(function(testFile) {
       html += "<tr><td>" + testFile.substring(12) + "</td>";
-      md += testFile.substring(12);
-      activeBrowsers.forEach(function(activeBrowsers) {
-        html += "<td>" + Math.round(data[activeBrowsers].tests[testFile] * 100) / 100 + "%</td>";
-        md += " | " + Math.round(data[activeBrowsers].tests[testFile] * 100) / 100 + "%";
+      browsers.forEach(function(browser) {
+        html += "<td>" + Math.round(data[browser].tests[testFile] * 100) / 100 + "%</td>";
       });
-      html += "</tr>\n";
-      md += "\n";
+      html += "</tr>\n"
     });
 
     html += "</tbody></table>";
 
-    // if (isMarkdown){
-    //   fs.writeFileSync("tests/readme.md", md);
-    // } else {
-      fs.writeFileSync("tests/readme.md", html);
-    // }
-    
+    fs.writeFileSync("tests/readme.md", html);
   };
 
 })();

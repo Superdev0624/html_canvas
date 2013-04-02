@@ -50,7 +50,8 @@ Run the full build process (including lint, qunit and webdriver tests):
 
 Skip lint and tests and simply build from source:
 
-    $ grunt build
+    $ grunt concat
+    $ grunt min
 
 ### Running tests ###
 
