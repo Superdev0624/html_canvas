@@ -85,6 +85,10 @@ _html2canvas.Renderer.Canvas = function(options) {
     ctx.fillStyle = fstyle;
 
 
+    if ( options.svgRendering && zStack.svgRender !== undefined ) {
+      // TODO: enable async rendering to support this
+      ctx.drawImage( zStack.svgRender, 0, 0 );
+    } else {
       for ( i = 0, queueLen = queue.length; i < queueLen; i+=1 ) {
         storageContext = queue.splice(0, 1)[0];
         storageContext.canvasPosition = storageContext.canvasPosition || {};
@@ -108,6 +112,7 @@ _html2canvas.Renderer.Canvas = function(options) {
           ctx.restore();
         }
       }
+    }
 
     h2clog("html2canvas: Renderer: Canvas renderer done - returning canvas obj");
 

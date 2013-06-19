@@ -1,9 +1,6 @@
 html2canvas
 ===========
 
-### Current build status ###
-[![Build Status](https://travis-ci.org/niklasvh/html2canvas.png)](https://travis-ci.org/niklasvh/html2canvas)
-
 #### JavaScript HTML renderer ####
 
  This script allows you to take "screenshots" of webpages or parts of it, directly on the users browser. The screenshot is based on the DOM and as such may not be 100% accurate to the real representation as it does not make an actual screenshot, but builds the screenshot based on the information available on the page.
@@ -25,7 +22,6 @@ The script should work fine on the following browsers:
 * Google Chrome
 * Opera 12+
 * IE9+
-* Safari 6+
 
 As each CSS property needs to be manually built to be supported, there are a number of properties that are not yet supported.
 
