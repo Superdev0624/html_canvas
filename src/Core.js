@@ -1,411 +1,520 @@
-"use strict";
+window.html2canvas = function(nodeList, options) {
+    var container = createWindowClone(document, window.innerWidth, window.innerHeight);
+    var clonedWindow = container.contentWindow;
+    var element = (nodeList === undefined) ? document.body : nodeList[0];
 
-var _html2canvas = {},
-previousElement,
-computedCSS,
-html2canvas;
+    var canvas = new CanvasRenderer();
+    var parser = new NodeParser(clonedWindow.document.documentElement, canvas, options || {});
 
-_html2canvas.Util = {};
-
-_html2canvas.Util.log = function(a) {
-  if (_html2canvas.logging && window.console && window.console.log) {
-    window.console.log(a);
-  }
+    window.console.log(parser);
+    options.onrendered(canvas.canvas);
 };
 
-_html2canvas.Util.trimText = (function(isNative){
-  return function(input) {
-    return isNative ? isNative.apply(input) : ((input || '') + '').replace( /^\s+|\s+$/g , '' );
-  };
-})(String.prototype.trim);
+function createWindowClone(ownerDocument, width, height) {
+    var documentElement = ownerDocument.documentElement.cloneNode(true),
+        container = ownerDocument.createElement("iframe");
 
-_html2canvas.Util.asFloat = function(v) {
-  return parseFloat(v);
+    container.style.display = "hidden";
+    container.style.position = "absolute";
+    container.style.width = width + "px";
+    container.style.height = height + "px";
+
+    ownerDocument.body.appendChild(container);
+
+    var documentClone = container.contentWindow.document;
+    documentClone.replaceChild(documentClone.adoptNode(documentElement), documentClone.documentElement);
+
+    return container;
+}
+
+function NodeParser(element, renderer, options) {
+    this.renderer = renderer;
+    this.options = options;
+    this.support = new Support();
+    this.range = null;
+    this.stack = new StackingContext(true, 1, element.ownerDocument, null);
+    var parent = new NodeContainer(element, null);
+    parent.blockFormattingContext = parent;
+    this.nodes = [parent].concat(this.getChildren(parent)).filter(function(container) {
+        return container.visible = container.isElementVisible();
+    });
+    this.createStackingContexts();
+    this.sortStackingContexts(this.stack);
+    this.parse(this.stack);
+}
+
+NodeParser.prototype.getChildren = function(parentContainer) {
+    return flatten([].filter.call(parentContainer.node.childNodes, renderableNode).map(function(node) {
+        var container = [node.nodeType === Node.TEXT_NODE ? new TextContainer(node, parentContainer) :  new NodeContainer(node, parentContainer)].filter(nonIgnoredElement);
+        return node.nodeType === Node.ELEMENT_NODE && container.length ? container.concat(this.getChildren(container[0])) : container;
+    }, this));
 };
 
-(function() {
-  // TODO: support all possible length values
-  var TEXT_SHADOW_PROPERTY = /((rgba|rgb)\([^\)]+\)(\s-?\d+px){0,})/g;
-  var TEXT_SHADOW_VALUES = /(-?\d+px)|(#.+)|(rgb\(.+\))|(rgba\(.+\))/g;
-  _html2canvas.Util.parseTextShadows = function (value) {
-    if (!value || value === 'none') {
-      return [];
-    }
+NodeParser.prototype.newStackingContext = function(container, hasOwnStacking) {
+    var stack = new StackingContext(hasOwnStacking, container.cssFloat('opacity'), container.node, container.parent);
+    var parentStack = stack.getParentStack(this);
+    parentStack.contexts.push(stack);
+    container.stack = stack;
+};
 
-    // find multiple shadow declarations
-    var shadows = value.match(TEXT_SHADOW_PROPERTY),
-      results = [];
-    for (var i = 0; shadows && (i < shadows.length); i++) {
-      var s = shadows[i].match(TEXT_SHADOW_VALUES);
-      results.push({
-        color: s[0],
-        offsetX: s[1] ? s[1].replace('px', '') : 0,
-        offsetY: s[2] ? s[2].replace('px', '') : 0,
-        blur: s[3] ? s[3].replace('px', '') : 0
-      });
-    }
-    return results;
-  };
-})();
-
-_html2canvas.Util.parseBackgroundImage = function (value) {
-    var whitespace = ' \r\n\t',
-        method, definition, prefix, prefix_i, block, results = [],
-        c, mode = 0, numParen = 0, quote, args;
-
-    var appendResult = function(){
-        if(method) {
-            if(definition.substr( 0, 1 ) === '"') {
-                definition = definition.substr( 1, definition.length - 2 );
-            }
-            if(definition) {
-                args.push(definition);
-            }
-            if(method.substr( 0, 1 ) === '-' &&
-                    (prefix_i = method.indexOf( '-', 1 ) + 1) > 0) {
-                prefix = method.substr( 0, prefix_i);
-                method = method.substr( prefix_i );
-            }
-            results.push({
-                prefix: prefix,
-                method: method.toLowerCase(),
-                value: block,
-                args: args
-            });
+NodeParser.prototype.createStackingContexts = function() {
+    this.nodes.forEach(function(container) {
+        if (isElement(container) && (this.isRootElement(container) || hasOpacity(container) || isPositionedForStacking(container) || this.isBodyWithTransparentRoot(container))) {
+            this.newStackingContext(container, true);
+        } else if (isElement(container) && (isPositioned(container))) {
+            this.newStackingContext(container, false);
+        } else {
+            container.assignStack(container.parent.stack);
         }
-        args = []; //for some odd reason, setting .length = 0 didn't work in safari
-        method =
-            prefix =
-            definition =
-            block = '';
+    }, this);
+};
+
+NodeParser.prototype.isBodyWithTransparentRoot = function(container) {
+    return container.node.nodeName === "BODY" && this.renderer.isTransparent(container.parent.css('backgroundColor'));
+};
+
+NodeParser.prototype.isRootElement = function(container) {
+    return container.node.nodeName === "HTML";
+};
+
+NodeParser.prototype.sortStackingContexts = function(stack) {
+    stack.contexts.sort(zIndexSort);
+    stack.contexts.forEach(this.sortStackingContexts, this);
+};
+
+NodeParser.prototype.parseBounds = function(nodeContainer) {
+    return nodeContainer.bounds = this.getBounds(nodeContainer.node);
+};
+
+NodeParser.prototype.getBounds = function(node) {
+    if (node.getBoundingClientRect) {
+        var clientRect = node.getBoundingClientRect();
+        return {
+            top: clientRect.top,
+            bottom: clientRect.bottom || (clientRect.top + clientRect.height),
+            left: clientRect.left,
+            width: node.offsetWidth,
+            height: node.offsetHeight
+        };
+    }
+    return {};
+};
+
+NodeParser.prototype.parseTextBounds = function(container) {
+    return function(text, index, textList) {
+        if (container.parent.css("textDecoration") !== "none" || text.trim().length !== 0) {
+            var offset = textList.slice(0, index).join("").length;
+            if (this.support.rangeBounds) {
+                return this.getRangeBounds(container.node, offset, text.length);
+            } else if (container.node && typeof(container.node.data) === "string") {
+                var replacementNode = container.node.splitText(text.length);
+                var bounds = this.getWrapperBounds(container.node);
+                container.node = replacementNode;
+                return bounds;
+            }
+        }
+    };
+};
+
+NodeParser.prototype.getWrapperBounds = function(node) {
+    var wrapper = node.ownerDocument.createElement('wrapper');
+    var parent = node.parentNode,
+        backupText = node.cloneNode(true);
+
+    wrapper.appendChild(node.cloneNode(true));
+    parent.replaceChild(wrapper, node);
+
+    var bounds = this.getBounds(wrapper);
+    parent.replaceChild(backupText, wrapper);
+    return bounds;
+};
+
+NodeParser.prototype.getRangeBounds = function(node, offset, length) {
+    var range = this.range || (this.range = node.ownerDocument.createRange());
+    range.setStart(node, offset);
+    range.setEnd(node, offset + length);
+    return range.getBoundingClientRect();
+};
+
+
+function negativeZIndex(container) {
+    return container.cssInt("zIndex") < 0;
+}
+
+function positiveZIndex(container) {
+    return container.cssInt("zIndex") > 0;
+}
+
+function zIndex0(container) {
+    return container.cssInt("zIndex") === 0;
+}
+
+function inlineLevel(container) {
+    return ["inline", "inline-block", "inline-table"].indexOf(container.css("display")) !== -1;
+}
+
+function isStackingContext(container) {
+    return (container instanceof StackingContext);
+}
+
+function hasText(container) {
+    return container.node.data.trim().length > 0;
+}
+
+function noLetterSpacing(container) {
+    return (/^(normal|none|0px)$/.test(container.parent.css("letterSpacing")));
+}
+
+NodeParser.prototype.parse = function(stack) {
+    // http://www.w3.org/TR/CSS21/visuren.html#z-index
+    var negativeZindex = stack.contexts.filter(negativeZIndex); // 2. the child stacking contexts with negative stack levels (most negative first).
+    var descendantElements = stack.children.filter(isElement).filter(not(isFloating));
+    var nonInlineNonPositionedDescendants = descendantElements.filter(not(isPositioned)).filter(not(inlineLevel)); // 3 the in-flow, non-inline-level, non-positioned descendants.
+    var nonPositionedFloats = descendantElements.filter(not(isPositioned)).filter(isFloating); // 4. the non-positioned floats.
+    var inFlow = descendantElements.filter(not(isPositioned)).filter(inlineLevel); // 5. the in-flow, inline-level, non-positioned descendants, including inline tables and inline blocks.
+    var stackLevel0 = stack.contexts.concat(descendantElements.filter(isPositioned)).filter(zIndex0); // 6. the child stacking contexts with stack level 0 and the positioned descendants with stack level 0.
+    var text = stack.children.filter(isTextNode).filter(hasText);
+    var positiveZindex = stack.contexts.filter(positiveZIndex); // 7. the child stacking contexts with positive stack levels (least positive first).
+    var rendered = [];
+    negativeZindex.concat(nonInlineNonPositionedDescendants).concat(nonPositionedFloats)
+    .concat(inFlow).concat(stackLevel0).concat(text).concat(positiveZindex).forEach(function(container) {
+        this.paint(container);
+        if (rendered.indexOf(container.node) !== -1) {
+            window.console.log(container, container.node);
+            throw new Error("rendering twice");
+        }
+        rendered.push(container.node);
+
+        if (isStackingContext(container)) {
+            this.parse(container);
+        }
+    }, this);
+};
+
+NodeParser.prototype.paint = function(container) {
+    if (isTextNode(container)) {
+        this.paintText(container);
+    } else {
+        this.paintNode(container);
+    }
+};
+
+NodeParser.prototype.paintNode = function(container) {
+    if (isStackingContext(container)) {
+        this.renderer.setOpacity(container.opacity);
+    }
+
+    var bounds = this.parseBounds(container);
+    var borderData = this.parseBorders(container);
+    this.renderer.clip(borderData.clip, function() {
+        this.renderer.renderBackground(container, bounds);
+    }, this);
+    this.renderer.renderBorders(borderData.borders);
+};
+
+NodeParser.prototype.paintText = function(container) {
+    container.applyTextTransform();
+    var textList = container.node.data.split(!this.options.letterRendering || noLetterSpacing(container) ? /(\b| )/ : "");
+    var weight = container.parent.fontWeight();
+    var size = container.parent.css('fontSize');
+    var family = container.parent.css('fontFamily');
+    this.renderer.font(container.parent.css('color'), container.parent.css('fontStyle'), container.parent.css('fontVariant'), weight, size, family);
+
+    textList.map(this.parseTextBounds(container), this).forEach(function(bounds, index) {
+        if (bounds) {
+            this.renderer.text(textList[index], bounds.left, bounds.bottom);
+          //  renderTextDecoration(ctx, textDecoration, bounds, metrics, color);
+        }
+      /*  var bounds = getTextBounds(state, text, textDecoration, (index < textList.length - 1), stack.transform.matrix);
+        if (bounds) {
+            drawText(text, bounds.left, bounds.bottom, ctx);
+            renderTextDecoration(ctx, textDecoration, bounds, metrics, color);
+        } */
+    }, this);
+};
+
+NodeParser.prototype.parseBorders = function(container) {
+    var nodeBounds = container.bounds;
+    var radius = getBorderRadiusData(container);
+    var borders = ["Top", "Right", "Bottom", "Left"].map(function(side) {
+        return {
+            width: container.cssInt('border' + side + 'Width'),
+            color: container.css('border' + side + 'Color'),
+            args: null
+        };
+    });
+    var borderPoints = calculateCurvePoints(nodeBounds, radius, borders);
+
+    return {
+        clip: this.parseBackgroundClip(container, borderPoints, borders, radius, nodeBounds),
+        borders: borders.map(function(border, borderSide) {
+            if (border.width > 0) {
+                var bx = nodeBounds.left;
+                var by = nodeBounds.top;
+                var bw = nodeBounds.width;
+                var bh = nodeBounds.height - (borders[2].width);
+
+                switch(borderSide) {
+                    case 0:
+                        // top border
+                        bh = borders[0].width;
+                        border.args = drawSide({
+                                c1: [bx, by],
+                                c2: [bx + bw, by],
+                                c3: [bx + bw - borders[1].width, by + bh],
+                                c4: [bx + borders[3].width, by + bh]
+                            }, radius[0], radius[1],
+                            borderPoints.topLeftOuter, borderPoints.topLeftInner, borderPoints.topRightOuter, borderPoints.topRightInner);
+                        break;
+                    case 1:
+                        // right border
+                        bx = nodeBounds.left + nodeBounds.width - (borders[1].width);
+                        bw = borders[1].width;
+
+                        border.args = drawSide({
+                                c1: [bx + bw, by],
+                                c2: [bx + bw, by + bh + borders[2].width],
+                                c3: [bx, by + bh],
+                                c4: [bx, by + borders[0].width]
+                            }, radius[1], radius[2],
+                            borderPoints.topRightOuter, borderPoints.topRightInner, borderPoints.bottomRightOuter, borderPoints.bottomRightInner);
+                        break;
+                    case 2:
+                        // bottom border
+                        by = (by + nodeBounds.height) - (borders[2].width);
+                        bh = borders[2].width;
+                        border.args = drawSide({
+                                c1: [bx + bw, by + bh],
+                                c2: [bx, by + bh],
+                                c3: [bx + borders[3].width, by],
+                                c4: [bx + bw - borders[3].width, by]
+                            }, radius[2], radius[3],
+                            borderPoints.bottomRightOuter, borderPoints.bottomRightInner, borderPoints.bottomLeftOuter, borderPoints.bottomLeftInner);
+                        break;
+                    case 3:
+                        // left border
+                        bw = borders[3].width;
+                        border.args = drawSide({
+                                c1: [bx, by + bh + borders[2].width],
+                                c2: [bx, by],
+                                c3: [bx + bw, by + borders[0].width],
+                                c4: [bx + bw, by + bh]
+                            }, radius[3], radius[0],
+                            borderPoints.bottomLeftOuter, borderPoints.bottomLeftInner, borderPoints.topLeftOuter, borderPoints.topLeftInner);
+                        break;
+                }
+            }
+            return border;
+        })
+    };
+};
+
+NodeParser.prototype.parseBackgroundClip = function(container, borderPoints, borders, radius, bounds) {
+    var backgroundClip = container.css('backgroundClip'),
+        borderArgs = [];
+
+    switch(backgroundClip) {
+        case "content-box":
+        case "padding-box":
+            parseCorner(borderArgs, radius[0], radius[1], borderPoints.topLeftInner, borderPoints.topRightInner, bounds.left + borders[3].width, bounds.top + borders[0].width);
+            parseCorner(borderArgs, radius[1], radius[2], borderPoints.topRightInner, borderPoints.bottomRightInner, bounds.left + bounds.width - borders[1].width, bounds.top + borders[0].width);
+            parseCorner(borderArgs, radius[2], radius[3], borderPoints.bottomRightInner, borderPoints.bottomLeftInner, bounds.left + bounds.width - borders[1].width, bounds.top + bounds.height - borders[2].width);
+            parseCorner(borderArgs, radius[3], radius[0], borderPoints.bottomLeftInner, borderPoints.topLeftInner, bounds.left + borders[3].width, bounds.top + bounds.height - borders[2].width);
+            break;
+
+        default:
+            parseCorner(borderArgs, radius[0], radius[1], borderPoints.topLeftOuter, borderPoints.topRightOuter, bounds.left, bounds.top);
+            parseCorner(borderArgs, radius[1], radius[2], borderPoints.topRightOuter, borderPoints.bottomRightOuter, bounds.left + bounds.width, bounds.top);
+            parseCorner(borderArgs, radius[2], radius[3], borderPoints.bottomRightOuter, borderPoints.bottomLeftOuter, bounds.left + bounds.width, bounds.top + bounds.height);
+            parseCorner(borderArgs, radius[3], radius[0], borderPoints.bottomLeftOuter, borderPoints.topLeftOuter, bounds.left, bounds.top + bounds.height);
+            break;
+    }
+
+    return borderArgs;
+};
+
+function parseCorner(borderArgs, radius1, radius2, corner1, corner2, x, y) {
+    if (radius1[0] > 0 || radius1[1] > 0) {
+        borderArgs.push(["line", corner1[0].start.x, corner1[0].start.y]);
+        corner1[0].curveTo(borderArgs);
+        corner1[1].curveTo(borderArgs);
+    } else {
+        borderArgs.push(["line", x, y]);
+    }
+
+    if (radius2[0] > 0 || radius2[1] > 0) {
+        borderArgs.push(["line", corner2[0].start.x, corner2[0].start.y]);
+    }
+}
+
+function getBorderRadiusData(container) {
+    return ["TopLeft", "TopRight", "BottomRight", "BottomLeft"].map(function(side) {
+        var value = container.css('border' + side + 'Radius');
+        var arr = value.split(" ");
+        if (arr.length <= 1) {
+            arr[1] = arr[0];
+        }
+        return arr.map(asInt);
+    });
+}
+
+function asInt(value) {
+    return parseInt(value, 10);
+}
+
+function getCurvePoints(x, y, r1, r2) {
+    var kappa = 4 * ((Math.sqrt(2) - 1) / 3);
+    var ox = (r1) * kappa, // control point offset horizontal
+        oy = (r2) * kappa, // control point offset vertical
+        xm = x + r1, // x-middle
+        ym = y + r2; // y-middle
+    return {
+        topLeft: bezierCurve({x: x, y: ym}, {x: x, y: ym - oy}, {x: xm - ox, y: y}, {x: xm, y: y}),
+        topRight: bezierCurve({x: x, y: y}, {x: x + ox,y: y}, {x: xm, y: ym - oy}, {x: xm, y: ym}),
+        bottomRight: bezierCurve({x: xm, y: y}, {x: xm, y: y + oy}, {x: x + ox, y: ym}, {x: x, y: ym}),
+        bottomLeft: bezierCurve({x: xm, y: ym}, {x: xm - ox, y: ym}, {x: x, y: y + oy}, {x: x, y:y})
+    };
+}
+
+function calculateCurvePoints(bounds, borderRadius, borders) {
+    var x = bounds.left,
+        y = bounds.top,
+        width = bounds.width,
+        height = bounds.height,
+
+        tlh = borderRadius[0][0],
+        tlv = borderRadius[0][1],
+        trh = borderRadius[1][0],
+        trv = borderRadius[1][1],
+        brh = borderRadius[2][0],
+        brv = borderRadius[2][1],
+        blh = borderRadius[3][0],
+        blv = borderRadius[3][1];
+
+    var topWidth = width - trh,
+        rightHeight = height - brv,
+        bottomWidth = width - brh,
+        leftHeight = height - blv;
+
+    return {
+        topLeftOuter: getCurvePoints(x, y, tlh, tlv).topLeft.subdivide(0.5),
+        topLeftInner: getCurvePoints(x + borders[3].width, y + borders[0].width, Math.max(0, tlh - borders[3].width), Math.max(0, tlv - borders[0].width)).topLeft.subdivide(0.5),
+        topRightOuter: getCurvePoints(x + topWidth, y, trh, trv).topRight.subdivide(0.5),
+        topRightInner: getCurvePoints(x + Math.min(topWidth, width + borders[3].width), y + borders[0].width, (topWidth > width + borders[3].width) ? 0 :trh - borders[3].width, trv - borders[0].width).topRight.subdivide(0.5),
+        bottomRightOuter: getCurvePoints(x + bottomWidth, y + rightHeight, brh, brv).bottomRight.subdivide(0.5),
+        bottomRightInner: getCurvePoints(x + Math.min(bottomWidth, width + borders[3].width), y + Math.min(rightHeight, height + borders[0].width), Math.max(0, brh - borders[1].width), Math.max(0, brv - borders[2].width)).bottomRight.subdivide(0.5),
+        bottomLeftOuter: getCurvePoints(x, y + leftHeight, blh, blv).bottomLeft.subdivide(0.5),
+        bottomLeftInner: getCurvePoints(x + borders[3].width, y + leftHeight, Math.max(0, blh - borders[3].width), Math.max(0, blv - borders[2].width)).bottomLeft.subdivide(0.5)
+    };
+}
+
+function bezierCurve(start, startControl, endControl, end) {
+    var lerp = function (a, b, t) {
+        return {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t
+        };
     };
 
-    appendResult();
-    for(var i = 0, ii = value.length; i<ii; i++) {
-        c = value[i];
-        if(mode === 0 && whitespace.indexOf( c ) > -1){
-            continue;
+    return {
+        start: start,
+        startControl: startControl,
+        endControl: endControl,
+        end: end,
+        subdivide: function(t) {
+            var ab = lerp(start, startControl, t),
+                bc = lerp(startControl, endControl, t),
+                cd = lerp(endControl, end, t),
+                abbc = lerp(ab, bc, t),
+                bccd = lerp(bc, cd, t),
+                dest = lerp(abbc, bccd, t);
+            return [bezierCurve(start, ab, abbc, dest), bezierCurve(dest, bccd, cd, end)];
+        },
+        curveTo: function(borderArgs) {
+            borderArgs.push(["bezierCurve", startControl.x, startControl.y, endControl.x, endControl.y, end.x, end.y]);
+        },
+        curveToReversed: function(borderArgs) {
+            borderArgs.push(["bezierCurve", endControl.x, endControl.y, startControl.x, startControl.y, start.x, start.y]);
         }
-        switch(c) {
-            case '"':
-                if(!quote) {
-                    quote = c;
-                }
-                else if(quote === c) {
-                    quote = null;
-                }
-                break;
-
-            case '(':
-                if(quote) { break; }
-                else if(mode === 0) {
-                    mode = 1;
-                    block += c;
-                    continue;
-                } else {
-                    numParen++;
-                }
-                break;
-
-            case ')':
-                if(quote) { break; }
-                else if(mode === 1) {
-                    if(numParen === 0) {
-                        mode = 0;
-                        block += c;
-                        appendResult();
-                        continue;
-                    } else {
-                        numParen--;
-                    }
-                }
-                break;
-
-            case ',':
-                if(quote) { break; }
-                else if(mode === 0) {
-                    appendResult();
-                    continue;
-                }
-                else if (mode === 1) {
-                    if(numParen === 0 && !method.match(/^url$/i)) {
-                        args.push(definition);
-                        definition = '';
-                        block += c;
-                        continue;
-                    }
-                }
-                break;
-        }
-
-        block += c;
-        if(mode === 0) { method += c; }
-        else { definition += c; }
-    }
-    appendResult();
-
-    return results;
-};
-
-_html2canvas.Util.Bounds = function (element) {
-  var clientRect, bounds = {};
-
-  if (element.getBoundingClientRect){
-    clientRect = element.getBoundingClientRect();
-
-    // TODO add scroll position to bounds, so no scrolling of window necessary
-    bounds.top = clientRect.top;
-    bounds.bottom = clientRect.bottom || (clientRect.top + clientRect.height);
-    bounds.left = clientRect.left;
-
-    bounds.width = element.offsetWidth;
-    bounds.height = element.offsetHeight;
-  }
-
-  return bounds;
-};
-
-// TODO ideally, we'd want everything to go through this function instead of Util.Bounds,
-// but would require further work to calculate the correct positions for elements with offsetParents
-_html2canvas.Util.OffsetBounds = function (element) {
-  var parent = element.offsetParent ? _html2canvas.Util.OffsetBounds(element.offsetParent) : {top: 0, left: 0};
-
-  return {
-    top: element.offsetTop + parent.top,
-    bottom: element.offsetTop + element.offsetHeight + parent.top,
-    left: element.offsetLeft + parent.left,
-    width: element.offsetWidth,
-    height: element.offsetHeight
-  };
-};
-
-function toPX(element, attribute, value ) {
-    var rsLeft = element.runtimeStyle && element.runtimeStyle[attribute],
-        left,
-        style = element.style;
-
-    // Check if we are not dealing with pixels, (Opera has issues with this)
-    // Ported from jQuery css.js
-    // From the awesome hack by Dean Edwards
-    // http://erik.eae.net/archives/2007/07/27/18.54.15/#comment-102291
-
-    // If we're not dealing with a regular pixel number
-    // but a number that has a weird ending, we need to convert it to pixels
-
-    if ( !/^-?[0-9]+\.?[0-9]*(?:px)?$/i.test( value ) && /^-?\d/.test(value) ) {
-        // Remember the original values
-        left = style.left;
-
-        // Put in the new values to get a computed value out
-        if (rsLeft) {
-            element.runtimeStyle.left = element.currentStyle.left;
-        }
-        style.left = attribute === "fontSize" ? "1em" : (value || 0);
-        value = style.pixelLeft + "px";
-
-        // Revert the changed values
-        style.left = left;
-        if (rsLeft) {
-            element.runtimeStyle.left = rsLeft;
-        }
-    }
-
-    if (!/^(thin|medium|thick)$/i.test(value)) {
-        return Math.round(parseFloat(value)) + "px";
-    }
-
-    return value;
+    };
 }
 
-function asInt(val) {
-    return parseInt(val, 10);
-}
+function drawSide(borderData, radius1, radius2, outer1, inner1, outer2, inner2) {
+    var borderArgs = [];
 
-function isPercentage(value) {
-  return value.toString().indexOf("%") !== -1;
-}
-
-function parseBackgroundSizePosition(value, element, attribute, index) {
-    value = (value || '').split(',');
-    value = value[index || 0] || value[0] || 'auto';
-    value = _html2canvas.Util.trimText(value).split(' ');
-    if(attribute === 'backgroundSize' && (value[0] && value[0].match(/^(cover|contain|auto)$/))) {
-        return value;
+    if (radius1[0] > 0 || radius1[1] > 0) {
+        borderArgs.push(["line", outer1[1].start.x, outer1[1].start.y]);
+        outer1[1].curveTo(borderArgs);
     } else {
-        value[0] = (value[0].indexOf( "%" ) === -1) ? toPX(element, attribute + "X", value[0]) : value[0];
-        if(value[1] === undefined) {
-            if(attribute === 'backgroundSize') {
-                value[1] = 'auto';
-                return value;
-            } else {
-                // IE 9 doesn't return double digit always
-                value[1] = value[0];
-            }
-        }
-        value[1] = (value[1].indexOf("%") === -1) ? toPX(element, attribute + "Y", value[1]) : value[1];
+        borderArgs.push([ "line", borderData.c1[0], borderData.c1[1]]);
     }
-    return value;
+
+    if (radius2[0] > 0 || radius2[1] > 0) {
+        borderArgs.push(["line", outer2[0].start.x, outer2[0].start.y]);
+        outer2[0].curveTo(borderArgs);
+        borderArgs.push(["line", inner2[0].end.x, inner2[0].end.y]);
+        inner2[0].curveToReversed(borderArgs);
+    } else {
+        borderArgs.push(["line", borderData.c2[0], borderData.c2[1]]);
+        borderArgs.push(["line", borderData.c3[0], borderData.c3[1]]);
+    }
+
+    if (radius1[0] > 0 || radius1[1] > 0) {
+        borderArgs.push(["line", inner1[1].end.x, inner1[1].end.y]);
+        inner1[1].curveToReversed(borderArgs);
+    } else {
+        borderArgs.push(["line", borderData.c4[0], borderData.c4[1]]);
+    }
+
+    return borderArgs;
 }
 
-_html2canvas.Util.getCSS = function (element, attribute, index) {
-    if (previousElement !== element) {
-      computedCSS = document.defaultView.getComputedStyle(element, null);
-    }
 
-    var value = computedCSS[attribute];
+function nonIgnoredElement(nodeContainer) {
+    return (nodeContainer.node.nodeType !== Node.ELEMENT_NODE || ["SCRIPT", "HEAD", "TITLE", "OBJECT", "BR"].indexOf(nodeContainer.node.nodeName) === -1);
+}
 
-    if (/^background(Size|Position)$/.test(attribute)) {
-        return parseBackgroundSizePosition(value, element, attribute, index);
-    } else if (/border(Top|Bottom)(Left|Right)Radius/.test(attribute)) {
-      var arr = value.split(" ");
-      if (arr.length <= 1) {
-          arr[1] = arr[0];
-      }
-      return arr.map(asInt);
-    }
+function flatten(arrays) {
+    return [].concat.apply([], arrays);
+}
 
-  return value;
-};
+function renderableNode(node) {
+    return (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE);
+}
 
-_html2canvas.Util.resizeBounds = function( current_width, current_height, target_width, target_height, stretch_mode ){
-  var target_ratio = target_width / target_height,
-    current_ratio = current_width / current_height,
-    output_width, output_height;
+function isPositionedForStacking(container) {
+    var position = container.css("position");
+    var zIndex = (position === "absolute" || position === "relative") ? container.css("zIndex") : "auto";
+    return zIndex !== "auto";
+}
 
-  if(!stretch_mode || stretch_mode === 'auto') {
-    output_width = target_width;
-    output_height = target_height;
-  } else if(target_ratio < current_ratio ^ stretch_mode === 'contain') {
-    output_height = target_height;
-    output_width = target_height * current_ratio;
-  } else {
-    output_width = target_width;
-    output_height = target_width / current_ratio;
-  }
+function isPositioned(container) {
+    return container.css("position") !== "static";
+}
 
-  return {
-    width: output_width,
-    height: output_height
-  };
-};
+function isFloating(container) {
+    return container.css("float") !== "none";
+}
 
-_html2canvas.Util.BackgroundPosition = function(element, bounds, image, imageIndex, backgroundSize ) {
-    var backgroundPosition =  _html2canvas.Util.getCSS(element, 'backgroundPosition', imageIndex),
-        leftPosition,
-        topPosition;
-    if (backgroundPosition.length === 1){
-        backgroundPosition = [backgroundPosition[0], backgroundPosition[0]];
-    }
+function not(callback) {
+    var context = this;
+    return function() {
+        return !callback.apply(context, arguments);
+    };
+}
 
-    if (isPercentage(backgroundPosition[0])){
-        leftPosition = (bounds.width - (backgroundSize || image).width) * (parseFloat(backgroundPosition[0]) / 100);
-    } else {
-        leftPosition = parseInt(backgroundPosition[0], 10);
-    }
+function isElement(container) {
+    return container.node.nodeType === Node.ELEMENT_NODE;
+}
 
-    if (backgroundPosition[1] === 'auto') {
-        topPosition = leftPosition / image.width * image.height;
-    } else if (isPercentage(backgroundPosition[1])){
-        topPosition =  (bounds.height - (backgroundSize || image).height) * parseFloat(backgroundPosition[1]) / 100;
-    } else {
-        topPosition = parseInt(backgroundPosition[1], 10);
-    }
+function isTextNode(container) {
+    return container.node.nodeType === Node.TEXT_NODE;
+}
 
-    if (backgroundPosition[0] === 'auto') {
-        leftPosition = topPosition / image.height * image.width;
-    }
+function zIndexSort(a, b) {
+    return a.cssInt("zIndex") - b.cssInt("zIndex");
+}
 
-    return {left: leftPosition, top: topPosition};
-};
-
-_html2canvas.Util.BackgroundSize = function(element, bounds, image, imageIndex) {
-  var backgroundSize =  _html2canvas.Util.getCSS(element, 'backgroundSize', imageIndex), width, height;
-
-  if (backgroundSize.length === 1) {
-    backgroundSize = [backgroundSize[0], backgroundSize[0]];
-  }
-
-  if (isPercentage(backgroundSize[0])) {
-    width = bounds.width * parseFloat(backgroundSize[0]) / 100;
-  } else if (/contain|cover/.test(backgroundSize[0])) {
-    return _html2canvas.Util.resizeBounds(image.width, image.height, bounds.width, bounds.height, backgroundSize[0]);
-  } else {
-    width = parseInt(backgroundSize[0], 10);
-  }
-
-  if (backgroundSize[0] === 'auto' && backgroundSize[1] === 'auto') {
-    height = image.height;
-  } else if (backgroundSize[1] === 'auto') {
-    height = width / image.width * image.height;
-  } else if (isPercentage(backgroundSize[1])) {
-    height =  bounds.height * parseFloat(backgroundSize[1]) / 100;
-  } else {
-    height = parseInt(backgroundSize[1], 10);
-  }
-
-  if (backgroundSize[0] === 'auto') {
-    width = height / image.height * image.width;
-  }
-
-  return {width: width, height: height};
-};
-
-_html2canvas.Util.BackgroundRepeat = function(element, imageIndex) {
-  var backgroundRepeat = _html2canvas.Util.getCSS(element, "backgroundRepeat").split(",").map(_html2canvas.Util.trimText);
-  return backgroundRepeat[imageIndex] || backgroundRepeat[0];
-};
-
-_html2canvas.Util.Extend = function (options, defaults) {
-  for (var key in options) {
-    if (options.hasOwnProperty(key)) {
-      defaults[key] = options[key];
-    }
-  }
-  return defaults;
-};
-
-
-/*
- * Derived from jQuery.contents()
- * Copyright 2010, John Resig
- * Dual licensed under the MIT or GPL Version 2 licenses.
- * http://jquery.org/license
- */
-_html2canvas.Util.Children = function( elem ) {
-  var children;
-  try {
-    children = (elem.nodeName && elem.nodeName.toUpperCase() === "IFRAME") ? elem.contentDocument || elem.contentWindow.document : (function(array) {
-      var ret = [];
-      if (array !== null) {
-        (function(first, second ) {
-          var i = first.length,
-          j = 0;
-
-          if (typeof second.length === "number") {
-            for (var l = second.length; j < l; j++) {
-              first[i++] = second[j];
-            }
-          } else {
-            while (second[j] !== undefined) {
-              first[i++] = second[j++];
-            }
-          }
-
-          first.length = i;
-
-          return first;
-        })(ret, array);
-      }
-      return ret;
-    })(elem.childNodes);
-
-  } catch (ex) {
-    _html2canvas.Util.log("html2canvas.Util.Children failed with exception: " + ex.message);
-    children = [];
-  }
-  return children;
-};
-
-_html2canvas.Util.isTransparent = function(backgroundColor) {
-  return (!backgroundColor || backgroundColor === "transparent" || backgroundColor === "rgba(0, 0, 0, 0)");
-};
+function hasOpacity(container) {
+	return container.css("opacity") < 1;
+}

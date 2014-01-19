@@ -1,126 +1,53 @@
-_html2canvas.Renderer.Canvas = function(options) {
-  options = options || {};
+function CanvasRenderer() {
+    Renderer.call(this);
+    this.canvas = document.createElement("canvas");
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    this.ctx = this.canvas.getContext("2d");
+    this.ctx.textBaseline = "bottom";
+    document.body.appendChild(this.canvas);
+}
 
-  var doc = document,
-  safeImages = [],
-  testCanvas = document.createElement("canvas"),
-  testctx = testCanvas.getContext("2d"),
-  Util = _html2canvas.Util,
-  canvas = options.canvas || doc.createElement('canvas');
+CanvasRenderer.prototype = Object.create(Renderer.prototype);
 
-  function createShape(ctx, args) {
-    ctx.beginPath();
-    args.forEach(function(arg) {
-      ctx[arg.name].apply(ctx, arg['arguments']);
-    });
-    ctx.closePath();
-  }
+CanvasRenderer.prototype.setFillStyle = function(color) {
+    this.ctx.fillStyle = color;
+    return this.ctx;
+};
 
-  function safeImage(item) {
-    if (safeImages.indexOf(item['arguments'][0].src) === -1) {
-      testctx.drawImage(item['arguments'][0], 0, 0);
-      try {
-        testctx.getImageData(0, 0, 1, 1);
-      } catch(e) {
-        testCanvas = doc.createElement("canvas");
-        testctx = testCanvas.getContext("2d");
-        return false;
-      }
-      safeImages.push(item['arguments'][0].src);
-    }
-    return true;
-  }
+CanvasRenderer.prototype.rectangle = function(left, top, width, height, color) {
+    this.setFillStyle(color).fillRect(left, top, width, height);
+};
 
-  function renderItem(ctx, item) {
-    switch(item.type){
-      case "variable":
-        ctx[item.name] = item['arguments'];
-        break;
-      case "function":
-        switch(item.name) {
-          case "createPattern":
-            if (item['arguments'][0].width > 0 && item['arguments'][0].height > 0) {
-              try {
-                ctx.fillStyle = ctx.createPattern(item['arguments'][0], "repeat");
-              } catch(e) {
-                Util.log("html2canvas: Renderer: Error creating pattern", e.message);
-              }
-            }
-            break;
-          case "drawShape":
-            createShape(ctx, item['arguments']);
-            break;
-          case "drawImage":
-            if (item['arguments'][8] > 0 && item['arguments'][7] > 0) {
-              if (!options.taintTest || (options.taintTest && safeImage(item))) {
-                ctx.drawImage.apply( ctx, item['arguments'] );
-              }
-            }
-            break;
-          default:
-            ctx[item.name].apply(ctx, item['arguments']);
-        }
-        break;
-    }
-  }
+CanvasRenderer.prototype.drawShape = function(shape, color) {
+    this.shape(shape);
+    this.setFillStyle(color).fill();
+};
 
-  return function(parsedData, options, document, queue, _html2canvas) {
-    var ctx = canvas.getContext("2d"),
-    newCanvas,
-    bounds,
-    fstyle,
-    zStack = parsedData.stack;
+CanvasRenderer.prototype.clip = function(shape, callback, context) {
+    this.ctx.save();
+    this.shape(shape).clip();
+    callback.call(context);
+    this.ctx.restore();
+};
 
-    canvas.width = canvas.style.width =  options.width || zStack.ctx.width;
-    canvas.height = canvas.style.height = options.height || zStack.ctx.height;
+CanvasRenderer.prototype.shape = function(shape) {
+    this.ctx.beginPath();
+    shape.forEach(function(point, index) {
+        this.ctx[(index === 0) ? "moveTo" : point[0] + "To" ].apply(this.ctx, point.slice(1));
+    }, this);
+    this.ctx.closePath();
+    return this.ctx;
+};
 
-    fstyle = ctx.fillStyle;
-    ctx.fillStyle = (Util.isTransparent(parsedData.backgroundColor) && options.background !== undefined) ? options.background : parsedData.backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = fstyle;
-    queue.forEach(function(storageContext) {
-      // set common settings for canvas
-      ctx.textBaseline = "bottom";
-      ctx.save();
+CanvasRenderer.prototype.font = function(color, style, variant, weight, size, family) {
+    this.setFillStyle(color).font = [style, variant, weight, size, family].join(" ");
+};
 
-      if (storageContext.transform.matrix) {
-        ctx.translate(storageContext.transform.origin[0], storageContext.transform.origin[1]);
-        ctx.transform.apply(ctx, storageContext.transform.matrix);
-        ctx.translate(-storageContext.transform.origin[0], -storageContext.transform.origin[1]);
-      }
+CanvasRenderer.prototype.setOpacity = function(opacity) {
+    this.ctx.globalAlpha = opacity;
+};
 
-      if (storageContext.clip){
-        ctx.beginPath();
-        ctx.rect(storageContext.clip.left, storageContext.clip.top, storageContext.clip.width, storageContext.clip.height);
-        ctx.clip();
-      }
-
-      if (storageContext.ctx.storage) {
-        storageContext.ctx.storage.forEach(function(item) {
-          renderItem(ctx, item);
-        });
-      }
-
-      ctx.restore();
-    });
-
-    Util.log("html2canvas: Renderer: Canvas renderer done - returning canvas obj");
-
-    if (options.elements.length === 1) {
-      if (typeof options.elements[0] === "object" && options.elements[0].nodeName !== "BODY") {
-        // crop image to the bounds of selected (single) element
-        bounds = _html2canvas.Util.Bounds(options.elements[0]);
-        newCanvas = document.createElement('canvas');
-        newCanvas.width = Math.ceil(bounds.width);
-        newCanvas.height = Math.ceil(bounds.height);
-        ctx = newCanvas.getContext("2d");
-
-        ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height);
-        canvas = null;
-        return newCanvas;
-      }
-    }
-
-    return canvas;
-  };
+CanvasRenderer.prototype.text = function(text, left, bottom) {
+    this.ctx.fillText(text, left, bottom);
 };
