@@ -8,7 +8,6 @@ window.html2canvas = function(nodeList, options) {
     }
 
     options.async = typeof(options.async) === "undefined" ? true : options.async;
-    options.allowTaint = typeof(options.allowTaint) === "undefined" ? false : options.allowTaint;
     options.removeContainer = typeof(options.removeContainer) === "undefined" ? true : options.removeContainer;
 
     var node = ((nodeList === undefined) ? [document.documentElement] : ((nodeList.length) ? nodeList : [nodeList]))[0];
@@ -32,18 +31,16 @@ function renderDocument(document, options, windowWidth, windowHeight) {
         var support = new Support(clonedWindow.document);
         var imageLoader = new ImageLoader(options, support);
         var bounds = getBounds(node);
-        var width = options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth();
-        var height = options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight();
-        var renderer = new CanvasRenderer(width, height, imageLoader, options);
+        var width = options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth(clonedWindow.document);
+        var height = options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight(clonedWindow.document);
+        var renderer = new CanvasRenderer(width, height, imageLoader);
         var parser = new NodeParser(node, renderer, support, imageLoader, options);
         return parser.ready.then(function() {
             log("Finished rendering");
-            var canvas = (options.type !== "view" && (node === clonedWindow.document.body || node === clonedWindow.document.documentElement)) ? renderer.canvas : crop(renderer.canvas, bounds);
             if (options.removeContainer) {
                 container.parentNode.removeChild(container);
-                log("Cleaned up container");
             }
-            return canvas;
+            return (options.type !== "view" && (node === clonedWindow.document.body || node === clonedWindow.document.documentElement)) ? renderer.canvas : crop(renderer.canvas, bounds);
         });
     });
 }
@@ -62,19 +59,19 @@ function crop(canvas, bounds) {
     return croppedCanvas;
 }
 
-function documentWidth () {
+function documentWidth (doc) {
     return Math.max(
-        Math.max(document.body.scrollWidth, document.documentElement.scrollWidth),
-        Math.max(document.body.offsetWidth, document.documentElement.offsetWidth),
-        Math.max(document.body.clientWidth, document.documentElement.clientWidth)
+        Math.max(doc.body.scrollWidth, doc.documentElement.scrollWidth),
+        Math.max(doc.body.offsetWidth, doc.documentElement.offsetWidth),
+        Math.max(doc.body.clientWidth, doc.documentElement.clientWidth)
     );
 }
 
-function documentHeight () {
+function documentHeight (doc) {
     return Math.max(
-        Math.max(document.body.scrollHeight, document.documentElement.scrollHeight),
-        Math.max(document.body.offsetHeight, document.documentElement.offsetHeight),
-        Math.max(document.body.clientHeight, document.documentElement.clientHeight)
+        Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight),
+        Math.max(doc.body.offsetHeight, doc.documentElement.offsetHeight),
+        Math.max(doc.body.clientHeight, doc.documentElement.clientHeight)
     );
 }
 
