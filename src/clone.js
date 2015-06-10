@@ -1,63 +1,85 @@
 var log = require('./log');
 var Promise = require('./promise');
 
+var html2canvasCanvasCloneAttribute = "data-html2canvas-canvas-clone";
+var html2canvasCanvasCloneIndex = 0;
+
+function cloneNodeValues(document, clone, nodeName) {
+    var originalNodes = document.getElementsByTagName(nodeName);
+    var clonedNodes = clone.getElementsByTagName(nodeName);
+    var count = originalNodes.length;
+    for (var i = 0; i < count; i++) {
+        clonedNodes[i].value = originalNodes[i].value;
+    }
+}
+
 function restoreOwnerScroll(ownerDocument, x, y) {
     if (ownerDocument.defaultView && (x !== ownerDocument.defaultView.pageXOffset || y !== ownerDocument.defaultView.pageYOffset)) {
         ownerDocument.defaultView.scrollTo(x, y);
     }
 }
 
-function cloneCanvasContents(canvas, clonedCanvas) {
-    try {
-        if (clonedCanvas) {
-            clonedCanvas.width = canvas.width;
-            clonedCanvas.height = canvas.height;
-            clonedCanvas.getContext("2d").putImageData(canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height), 0, 0);
-        }
-    } catch(e) {
-        log("Unable to copy canvas content from", canvas, e);
-    }
+function labelCanvasElements(ownerDocument) {
+    [].slice.call(ownerDocument.querySelectorAll("canvas"), 0).forEach(function(canvas) {
+        canvas.setAttribute(html2canvasCanvasCloneAttribute, "canvas-" + html2canvasCanvasCloneIndex++);
+    });
 }
 
-function cloneNode(node, javascriptEnabled) {
+function cloneCanvasContents(ownerDocument, documentClone) {
+    [].slice.call(ownerDocument.querySelectorAll("[" + html2canvasCanvasCloneAttribute + "]"), 0).forEach(function(canvas) {
+        try {
+            var clonedCanvas = documentClone.querySelector('[' + html2canvasCanvasCloneAttribute + '="' + canvas.getAttribute(html2canvasCanvasCloneAttribute) + '"]');
+            if (clonedCanvas) {
+                clonedCanvas.width = canvas.width;
+                clonedCanvas.height = canvas.height;
+                clonedCanvas.getContext("2d").putImageData(canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height), 0, 0);
+            }
+        } catch(e) {
+            log("Unable to copy canvas content from", canvas, e);
+        }
+        canvas.removeAttribute(html2canvasCanvasCloneAttribute);
+    });
+}
+
+function removeScriptNodes(parent) {
+    [].slice.call(parent.childNodes, 0).filter(isElementNode).forEach(function(node) {
+        if (node.tagName === "SCRIPT") {
+            parent.removeChild(node);
+        } else {
+            removeScriptNodes(node);
+        }
+    });
+    return parent;
+}
+
+function isIE9() {
+    return document.documentMode && document.documentMode <= 9;
+}
+
+// https://github.com/niklasvh/html2canvas/issues/503
+function cloneNodeIE9(node, javascriptEnabled) {
     var clone = node.nodeType === 3 ? document.createTextNode(node.nodeValue) : node.cloneNode(false);
 
     var child = node.firstChild;
     while(child) {
         if (javascriptEnabled === true || child.nodeType !== 1 || child.nodeName !== 'SCRIPT') {
-            clone.appendChild(cloneNode(child, javascriptEnabled));
+            clone.appendChild(cloneNodeIE9(child, javascriptEnabled));
         }
         child = child.nextSibling;
-    }
-
-    if (node.nodeType === 1) {
-        clone._scrollTop = node.scrollTop;
-        clone._scrollLeft = node.scrollLeft;
-        if (node.nodeName === "CANVAS") {
-            cloneCanvasContents(node, clone);
-        } else if (node.nodeName === "TEXTAREA" || node.nodeName === "SELECT") {
-            clone.value = node.value;
-        }
     }
 
     return clone;
 }
 
-function initNode(node) {
-    if (node.nodeType === 1) {
-        node.scrollTop = node._scrollTop;
-        node.scrollLeft = node._scrollLeft;
 
-        var child = node.firstChild;
-        while(child) {
-            initNode(child);
-            child = child.nextSibling;
-        }
-    }
+
+function isElementNode(node) {
+    return node.nodeType === Node.ELEMENT_NODE;
 }
 
 module.exports = function(ownerDocument, containerDocument, width, height, options, x ,y) {
-    var documentElement = cloneNode(ownerDocument.documentElement, options.javascriptEnabled);
+    labelCanvasElements(ownerDocument);
+    var documentElement = isIE9() ? cloneNodeIE9(ownerDocument.documentElement, options.javascriptEnabled) : ownerDocument.documentElement.cloneNode(true);
     var container = containerDocument.createElement("iframe");
 
     container.className = "html2canvas-container";
@@ -74,21 +96,19 @@ module.exports = function(ownerDocument, containerDocument, width, height, optio
     return new Promise(function(resolve) {
         var documentClone = container.contentWindow.document;
 
+        cloneNodeValues(ownerDocument.documentElement, documentElement, "textarea");
+        cloneNodeValues(ownerDocument.documentElement, documentElement, "select");
+
         /* Chrome doesn't detect relative background-images assigned in inline <style> sheets when fetched through getComputedStyle
          if window url is about:blank, we can assign the url to current by writing onto the document
          */
         container.contentWindow.onload = container.onload = function() {
             var interval = setInterval(function() {
                 if (documentClone.body.childNodes.length > 0) {
-                    initNode(documentClone.documentElement);
+                    cloneCanvasContents(ownerDocument, documentClone);
                     clearInterval(interval);
                     if (options.type === "view") {
                         container.contentWindow.scrollTo(x, y);
-                        if ((/(iPad|iPhone|iPod)/g).test(navigator.userAgent) && (container.contentWindow.scrollY !== y || container.contentWindow.scrollX !== x)) {
-                            documentClone.documentElement.style.top = (-y) + "px";
-                            documentClone.documentElement.style.left = (-x) + "px";
-                            documentClone.documentElement.style.position = 'absolute';
-                        }
                     }
                     resolve(container);
                 }
@@ -99,7 +119,7 @@ module.exports = function(ownerDocument, containerDocument, width, height, optio
         documentClone.write("<!DOCTYPE html><html></html>");
         // Chrome scrolls the parent document for some reason after the write to the cloned window???
         restoreOwnerScroll(ownerDocument, x, y);
-        documentClone.replaceChild(documentClone.adoptNode(documentElement), documentClone.documentElement);
+        documentClone.replaceChild(options.javascriptEnabled === true ? documentClone.adoptNode(documentElement) : removeScriptNodes(documentClone.adoptNode(documentElement)), documentClone.documentElement);
         documentClone.close();
     });
 };
