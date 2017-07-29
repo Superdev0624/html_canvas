@@ -1,18 +1,37 @@
-var NodeContainer = require('./nodecontainer');
+/* @flow */
+'use strict';
 
-function StackingContext(hasOwnStacking, opacity, element, parent) {
-    NodeContainer.call(this, element, parent);
-    this.ownStacking = hasOwnStacking;
-    this.contexts = [];
-    this.children = [];
-    this.opacity = (this.parent ? this.parent.stack.opacity : 1) * opacity;
+import NodeContainer from './NodeContainer';
+import {POSITION} from './parsing/position';
+
+export default class StackingContext {
+    container: NodeContainer;
+    parent: ?StackingContext;
+    contexts: Array<StackingContext>;
+    children: Array<NodeContainer>;
+    treatAsRealStackingContext: boolean;
+
+    constructor(
+        container: NodeContainer,
+        parent: ?StackingContext,
+        treatAsRealStackingContext: boolean
+    ) {
+        this.container = container;
+        this.parent = parent;
+        this.contexts = [];
+        this.children = [];
+        this.treatAsRealStackingContext = treatAsRealStackingContext;
+    }
+
+    getOpacity(): number {
+        return this.parent
+            ? this.container.style.opacity * this.parent.getOpacity()
+            : this.container.style.opacity;
+    }
+
+    getRealParentStackingContext(): StackingContext {
+        return !this.parent || this.treatAsRealStackingContext
+            ? this
+            : this.parent.getRealParentStackingContext();
+    }
 }
-
-StackingContext.prototype = Object.create(NodeContainer.prototype);
-
-StackingContext.prototype.getParentStack = function(context) {
-    var parentStack = (this.parent) ? this.parent.stack : null;
-    return parentStack ? (parentStack.ownStacking ? parentStack : parentStack.getParentStack(context)) : context.stack;
-};
-
-module.exports = StackingContext;

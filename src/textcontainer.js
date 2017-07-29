@@ -1,23 +1,33 @@
-var NodeContainer = require('./nodecontainer');
+/* @flow */
+'use strict';
 
-function TextContainer(node, parent) {
-    NodeContainer.call(this, node, parent);
+import type NodeContainer from './NodeContainer';
+import type {TextTransform} from './parsing/textTransform';
+import type {TextBounds} from './TextBounds';
+import {TEXT_TRANSFORM} from './parsing/textTransform';
+import {parseTextBounds} from './TextBounds';
+
+export default class TextContainer {
+    text: string;
+    parent: NodeContainer;
+    bounds: Array<TextBounds>;
+
+    constructor(node: Text, parent: NodeContainer) {
+        this.text = transform(node.data, parent.style.textTransform);
+        this.parent = parent;
+        this.bounds = parseTextBounds(this, node);
+    }
 }
 
-TextContainer.prototype = Object.create(NodeContainer.prototype);
+const CAPITALIZE = /(^|\s|:|-|\(|\))([a-z])/g;
 
-TextContainer.prototype.applyTextTransform = function() {
-    this.node.data = this.transform(this.parent.css("textTransform"));
-};
-
-TextContainer.prototype.transform = function(transform) {
-    var text = this.node.data;
-    switch(transform){
-        case "lowercase":
+const transform = (text: string, transform: TextTransform) => {
+    switch (transform) {
+        case TEXT_TRANSFORM.LOWERCASE:
             return text.toLowerCase();
-        case "capitalize":
-            return text.replace(/(^|\s|:|-|\(|\))([a-z])/g, capitalize);
-        case "uppercase":
+        case TEXT_TRANSFORM.CAPITALIZE:
+            return text.replace(CAPITALIZE, capitalize);
+        case TEXT_TRANSFORM.UPPERCASE:
             return text.toUpperCase();
         default:
             return text;
@@ -28,6 +38,6 @@ function capitalize(m, p1, p2) {
     if (m.length > 0) {
         return p1 + p2.toUpperCase();
     }
-}
 
-module.exports = TextContainer;
+    return m;
+}
