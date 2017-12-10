@@ -30,8 +30,7 @@ import {
     calculateBackgroungPaintingArea,
     calculateBackgroundPosition,
     calculateBackgroundRepeatPath,
-    calculateBackgroundSize,
-    calculateGradientBackgroundSize
+    calculateBackgroundSize
 } from './parsing/background';
 import {BORDER_STYLE} from './parsing/border';
 
@@ -203,8 +202,12 @@ export default class Renderer {
         container.style.background.backgroundImage.slice(0).reverse().forEach(backgroundImage => {
             if (backgroundImage.source.method === 'url' && backgroundImage.source.args.length) {
                 this.renderBackgroundRepeat(container, backgroundImage);
-            } else if (/gradient/i.test(backgroundImage.source.method)) {
-                this.renderBackgroundGradient(container, backgroundImage);
+            } else {
+                const gradient = parseGradient(backgroundImage.source, container.bounds);
+                if (gradient) {
+                    const bounds = container.bounds;
+                    this.target.renderLinearGradient(bounds, gradient);
+                }
             }
         });
     }
@@ -239,35 +242,6 @@ export default class Renderer {
             const offsetX = Math.round(backgroundPositioningArea.left + position.x);
             const offsetY = Math.round(backgroundPositioningArea.top + position.y);
             this.target.renderRepeat(path, image, backgroundImageSize, offsetX, offsetY);
-        }
-    }
-
-    renderBackgroundGradient(container: NodeContainer, background: BackgroundImage) {
-        const backgroundPositioningArea = calculateBackgroungPositioningArea(
-            container.style.background.backgroundOrigin,
-            container.bounds,
-            container.style.padding,
-            container.style.border
-        );
-        const backgroundImageSize = calculateGradientBackgroundSize(
-            background,
-            backgroundPositioningArea
-        );
-        const position = calculateBackgroundPosition(
-            background.position,
-            backgroundImageSize,
-            backgroundPositioningArea
-        );
-        const gradientBounds = new Bounds(
-            Math.round(backgroundPositioningArea.left + position.x),
-            Math.round(backgroundPositioningArea.top + position.y),
-            backgroundImageSize.width,
-            backgroundImageSize.height
-        );
-
-        const gradient = parseGradient(background.source, gradientBounds);
-        if (gradient) {
-            this.target.renderLinearGradient(gradientBounds, gradient);
         }
     }
 
