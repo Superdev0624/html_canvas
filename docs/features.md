@@ -22,7 +22,7 @@ Below is a list of all the supported CSS properties and values.
    - border-width
  - bottom
  - box-sizing
- - content
+ - content (**Does not support `attr()`**)
  - color
  - display
  - flex
