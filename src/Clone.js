@@ -268,12 +268,8 @@ export class DocumentCloner {
         for (let child = node.firstChild; child; child = child.nextSibling) {
             if (
                 child.nodeType !== Node.ELEMENT_NODE ||
-                (child.nodeName !== 'SCRIPT' &&
-                    // $FlowFixMe
-                    !child.hasAttribute(IGNORE_ATTRIBUTE) &&
-                    (typeof this.options.ignoreElements !== 'function' ||
-                        // $FlowFixMe
-                        !this.options.ignoreElements(child)))
+                // $FlowFixMe
+                (child.nodeName !== 'SCRIPT' && !child.hasAttribute(IGNORE_ATTRIBUTE))
             ) {
                 if (!this.copyStyles || child.nodeName !== 'STYLE') {
                     clone.appendChild(this.cloneNode(child));
@@ -611,21 +607,14 @@ export const cloneWindow = (
                 documentClone.documentElement.style.left = -bounds.left + 'px';
                 documentClone.documentElement.style.position = 'absolute';
             }
-
-            const result = Promise.resolve([
-                cloneIframeContainer,
-                cloner.clonedReferenceElement,
-                cloner.resourceLoader
-            ]);
-
-            const onclone = options.onclone;
-
             return cloner.clonedReferenceElement instanceof cloneWindow.HTMLElement ||
             cloner.clonedReferenceElement instanceof ownerDocument.defaultView.HTMLElement ||
             cloner.clonedReferenceElement instanceof HTMLElement
-                ? typeof onclone === 'function'
-                  ? Promise.resolve().then(() => onclone(documentClone)).then(() => result)
-                  : result
+                ? Promise.resolve([
+                      cloneIframeContainer,
+                      cloner.clonedReferenceElement,
+                      cloner.resourceLoader
+                  ])
                 : Promise.reject(
                       __DEV__
                           ? `Error finding the ${referenceElement.nodeName} in the cloned document`
